@@ -4,10 +4,14 @@ import subprocess
 import cv2
 import numpy as np
 import keras
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+from PIL import Image
 from keras.preprocessing.image import ImageDataGenerator
 from keras.models import Sequential
 from keras.layers import Activation, Dropout, Conv2D, MaxPooling2D, Conv2DTranspose
 from keras.callbacks import ModelCheckpoint, EarlyStopping, LearningRateScheduler, ReduceLROnPlateau
+from mask_to_submission import mask_to_submission_strings, masks_to_submission
 
 os.environ['KAGGLE_USERNAME'] = ""
 os.environ['KAGGLE_KEY'] = ""
@@ -64,7 +68,7 @@ def submit_solution(fname='test', message='test'):
 	Submits solution on kaggle.
 	'''
 	submitbase = 'kaggle competitions submit -c cil-road-segmentation-2019 -f '
-	submit_all = submitbase + fname + '.csv -m "' + message + '"'
+	submit_all = submitbase + fname + ' -m "' + message + '"'
 	subprocess.call(submit_all.split(' '))
 
 def build_model():
@@ -72,37 +76,60 @@ def build_model():
 	Constructs a baseline model.
 	'''
 	model = Sequential()
-	model.add(Conv2D(32, (3, 3), padding='same',
+	model.add(Conv2D(128, (3, 3), padding='same',
 	                 input_shape=x_train.shape[1:]))
 	model.add(Activation('relu'))
-	model.add(Conv2D(32, (3, 3)))
+	model.add(Conv2D(128, (3, 3)))
 	model.add(Activation('relu'))
 	model.add(MaxPooling2D(pool_size=(2, 2)))
-	model.add(Dropout(0.25))
+	model.add(Dropout(0.2))
 
 	model.add(Conv2D(64, (3, 3), padding='same'))
 	model.add(Activation('relu'))
 	model.add(Conv2D(64, (3, 3)))
 	model.add(Activation('relu'))
 	model.add(MaxPooling2D(pool_size=(2, 2)))
-	model.add(Dropout(0.25))
+	model.add(Dropout(0.2))
 
 	model.add(Conv2D(32, (3, 3), padding='same'))
 	model.add(Activation('relu'))
 	model.add(Conv2DTranspose(32, (3,3), strides=(2,2)))
 	model.add(Activation('relu'))
 	model.add(Conv2DTranspose(16, (3,3), strides=(1,1)))
-	model.add(Dropout(0.25))
+	model.add(Dropout(0.2))
 
 	model.add(Conv2D(8, (3, 3), padding='same'))
 	model.add(Activation('relu'))
 	model.add(Conv2DTranspose(4, (3,3), strides=(2,2), padding='same'))
 	model.add(Activation('relu'))
 	model.add(Conv2DTranspose(1, (3,3), strides=(1,1)))
-	model.add(Dropout(0.25))
+	model.add(Dropout(0.2))
 
 	model.add(Activation('sigmoid'))
 	return model
+
+def pred_overlap(x_test, dim_train, dim_test):
+	n_test = x_test.shape[0]
+	tl = x_test[:,:dim_train,:dim_train,:]
+	tr = x_test[:,:dim_train,-dim_train:,:]
+	bl = x_test[:,-dim_train:,:dim_train,:]
+	br = x_test[:,-dim_train:,-dim_train:,:]
+	tl_pred = model.predict(tl)
+	tr_pred = model.predict(tr)
+	bl_pred = model.predict(bl)
+	br_pred = model.predict(br)
+	test_pred = np.zeros((n_test, dim_test, dim_test, 1))
+	test_pred[:,:dim_train,:dim_train,:] += tl_pred
+	test_pred[:,:dim_train,-dim_train:,:] += tr_pred
+	test_pred[:,-dim_train:,:dim_train,:] += bl_pred
+	test_pred[:,-dim_train:,-dim_train:,:] += br_pred
+	pred_weights = np.zeros((n_test, dim_test, dim_test, 1))
+	pred_weights[:,:dim_train,:dim_train,:] += 1
+	pred_weights[:,:dim_train,-dim_train:,:] += 1
+	pred_weights[:,-dim_train:,:dim_train,:] += 1
+	pred_weights[:,-dim_train:,-dim_train:,:] += 1
+	test_pred = np.divide(test_pred, pred_weights)
+	return test_pred
 
 # Load train and test data
 path_train = './training/'
@@ -114,20 +141,20 @@ dim_train = x_train.shape[1]
 
 # Set hyperparameters
 batch_size = 16
-epochs = 100
+epochs = 200
 
 # Build and compile the model
 model = build_model()
 opt = keras.optimizers.Adam(0.001)
 model.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
-model.summary()
+# model.summary()
 
 # Set callbacks
 file_checkpoint = "baseline_cnn_check.h5"
 checkpoint = ModelCheckpoint(file_checkpoint, monitor='val_acc', verbose=1, save_best_only=True, mode='max')
-early = EarlyStopping(monitor="val_acc", mode="max", patience=10, verbose=1)
-redonplat = ReduceLROnPlateau(monitor="val_acc", mode="max", patience=7, verbose=2)
-callbacks_list = [checkpoint, early, redonplat]
+early = EarlyStopping(monitor="val_acc", mode="max", patience=20, verbose=1)
+redonplat = ReduceLROnPlateau(monitor="val_acc", mode="max", patience=15, verbose=2)
+callbacks_list = [checkpoint, early]
 
 # Train the model
 model.fit(x_train, y_train,
@@ -135,8 +162,30 @@ model.fit(x_train, y_train,
           epochs=epochs,
           validation_split=0.1,
           callbacks=callbacks_list,
+          verbose=2,
           shuffle=True)
 
 # Load the checkpoint model
-model.save_weights('baseline_cnn_redun.h5')
 model.load_weights(file_checkpoint)
+
+# Predict on test data
+test_pred = pred_overlap(x_test, dim_train, dim_test)
+test_binary = np.ones(test_pred.shape)
+test_binary[test_pred < 0.5] = 0
+test_binary = test_binary.astype(int)
+
+# Get file names
+path_pred = './pred_ims/'
+imgnames = [path_pred + fname for fname in sorted(os.listdir(path_test), key=lambda x: int( x[x.find('_')+1:x.find('.')] ))]
+
+# Save prediction images
+for i in range(len(imgnames)):
+	imarr = test_binary[i,:,:,0]
+	plt.imsave(imgnames[i], imarr, cmap=cm.gray)
+
+# Create submission file
+submission_filename = 'test_submission.csv'
+masks_to_submission(submission_filename, *imgnames)
+
+# Send submission file
+# submit_solution(fname=submission_filename, message='test')
