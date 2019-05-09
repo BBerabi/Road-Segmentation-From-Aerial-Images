@@ -24,8 +24,8 @@ argparser = argparse.ArgumentParser()
 argparser.add_argument('--verbose', action='store', dest='verbose', help='verbosity of the script', default=True, type=bool)
 argparser.add_argument('--batch-size', action='store', dest='batch_size', help='batch size for processing the samples', default=16, type=int)
 argparser.add_argument('--early-patience', action='store', dest='early_patience', help='patience for early stopping', default=25, type=int)
-argparser.add_argument('--epochs', action='store', dest='epochs', help='number of epochs', default=200, type=int)
-argparser.add_argument('--valid-split', action='store', dest='valid_split', help='percentage of validation examples', default=0.2, type=float)
+argparser.add_argument('--epochs', action='store', dest='epochs', help='number of epochs', default=45, type=int)
+argparser.add_argument('--valid-split', action='store', dest='valid_split', help='percentage of validation examples', default=0.0, type=float)
 args = argparser.parse_args()
 verbose = args.verbose
 
@@ -84,43 +84,6 @@ def submit_solution(fname='test', message='test'):
 	submit_all = submitbase + fname + ' -m "' + message + '"'
 	subprocess.call(submit_all.split(' '))
 
-def build_model():
-	'''
-	Constructs a baseline model.
-	'''
-	model = Sequential()
-	model.add(Conv2D(128, (3, 3), padding='same',
-	                 input_shape=x_train.shape[1:]))
-	model.add(Activation('relu'))
-	model.add(Conv2D(128, (3, 3)))
-	model.add(Activation('relu'))
-	model.add(MaxPooling2D(pool_size=(2, 2)))
-	model.add(Dropout(0.2))
-
-	model.add(Conv2D(64, (3, 3), padding='same'))
-	model.add(Activation('relu'))
-	model.add(Conv2D(64, (3, 3)))
-	model.add(Activation('relu'))
-	model.add(MaxPooling2D(pool_size=(2, 2)))
-	model.add(Dropout(0.2))
-
-	model.add(Conv2D(32, (3, 3), padding='same'))
-	model.add(Activation('relu'))
-	model.add(Conv2DTranspose(32, (3,3), strides=(2,2)))
-	model.add(Activation('relu'))
-	model.add(Conv2DTranspose(16, (3,3), strides=(1,1)))
-	model.add(Dropout(0.2))
-
-	model.add(Conv2D(8, (3, 3), padding='same'))
-	model.add(Activation('relu'))
-	model.add(Conv2DTranspose(4, (3,3), strides=(2,2), padding='same'))
-	model.add(Activation('relu'))
-	model.add(Conv2DTranspose(1, (3,3), strides=(1,1)))
-	model.add(Dropout(0.2))
-
-	model.add(Activation('sigmoid'))
-	return model
-
 def pred_overlap(model, x_test, dim_train, dim_test):
 	'''
 	Make predictions by averaging over predictions of smaller overlapping segments.
@@ -164,10 +127,23 @@ def pred_resize(model, x_test, dim_train, dim_test):
 	test_pred_upscaled = []
 	for i in range(n_test):
 		upscaled = cv2.resize(test_pred_downscaled[i], dsize=(dim_test, dim_test), interpolation=cv2.INTER_CUBIC)
-		test_pred_upscaled.append(img_ds)
+		test_pred_upscaled.append(upscaled)
 	test_pred_upscaled = np.asarray(test_pred_upscaled)
+	test_pred = np.expand_dims(test_pred_upscaled, -1)
+	return test_pred
 
-	return test_pred_upscaled
+def create_submission(test_pred, sub_fname='test_submission.csv'):
+	test_binary = np.ones(test_pred.shape)
+	test_binary[test_pred < 0.5] = 0
+	test_binary = test_binary.astype(int)
+	# Get file names
+	imgnames = [path_pred + fname for fname in sorted(os.listdir(path_test), key=lambda x: int( x[x.find('_')+1:x.find('.')] ))]
+	# Save prediction images
+	for i in range(len(imgnames)):
+		imarr = test_binary[i,:,:,0]
+		plt.imsave(imgnames[i], imarr, cmap=cm.gray)
+	# Create submission file
+	masks_to_submission(sub_fname, *imgnames)
 
 def augment_rotate_full(x_train, y_train):
 	'''
@@ -263,23 +239,55 @@ def hold_out_validation(x_train, y_train, valid_split=args.valid_split):
 	y_train = y_train[train_indices]
 	return x_train, y_train, x_valid, y_valid
 
-def create_submission(test_pred, sub_fname='test_submission.csv'):
-	test_binary = np.ones(test_pred.shape)
-	test_binary[test_pred < 0.5] = 0
-	test_binary = test_binary.astype(int)
-	# Get file names
-	imgnames = [path_pred + fname for fname in sorted(os.listdir(path_test), key=lambda x: int( x[x.find('_')+1:x.find('.')] ))]
-	# Save prediction images
-	for i in range(len(imgnames)):
-		imarr = test_binary[i,:,:,0]
-		plt.imsave(imgnames[i], imarr, cmap=cm.gray)
-	# Create submission file
-	masks_to_submission(sub_fname, *imgnames)
+def build_model():
+	'''
+	Constructs a baseline model.
+	'''
+	model = Sequential()
+	model.add(Conv2D(128, (3, 3), padding='same',
+	                 input_shape=x_train.shape[1:]))
+	model.add(Activation('relu'))
+	model.add(Conv2D(128, (3, 3)))
+	model.add(Activation('relu'))
+	model.add(MaxPooling2D(pool_size=(2, 2)))
+	model.add(Dropout(0.2))
+
+	model.add(Conv2D(64, (3, 3), padding='same'))
+	model.add(Activation('relu'))
+	model.add(Conv2D(64, (3, 3)))
+	model.add(Activation('relu'))
+	model.add(MaxPooling2D(pool_size=(2, 2)))
+	model.add(Dropout(0.2))
+
+	model.add(Conv2D(32, (3, 3), padding='same'))
+	model.add(Activation('relu'))
+	model.add(Conv2DTranspose(32, (3,3), strides=(2,2)))
+	model.add(Activation('relu'))
+	model.add(Conv2DTranspose(16, (3,3), strides=(1,1)))
+	model.add(Dropout(0.2))
+
+	model.add(Conv2D(8, (3, 3), padding='same'))
+	model.add(Activation('relu'))
+	model.add(Conv2DTranspose(4, (3,3), strides=(2,2), padding='same'))
+	model.add(Activation('relu'))
+	model.add(Conv2DTranspose(1, (3,3), strides=(1,1)))
+	model.add(Dropout(0.2))
+
+	model.add(Activation('sigmoid'))
+	return model
 
 # Load train and test data
 path_train = './training/'
 path_test = './test_images/'
 path_pred = './pred_ims/'
+path_out = './outdir/'
+paths = [path_train, path_test, path_pred, path_out]
+
+for directory in paths:
+	if not os.path.exists(directory):
+		print(directory, ' not exists')
+		os.makedirs(directory)
+
 download_data()
 x_train, y_train, x_test = load_data()
 dim_test = x_test.shape[1]
@@ -288,23 +296,19 @@ if verbose:
 	print('Loaded the data...')
 
 # Hold-out validation
-x_train, y_train, x_valid, y_valid = hold_out_validation(x_train, y_train, valid_split=0.1)
+if args.valid_split > 0:
+	x_train, y_train, x_valid, y_valid = hold_out_validation(x_train, y_train, valid_split=0.1)
 
 # Augment the data
 
 # Symmetry
 x_flip, y_flip = augment_flip(x_train, y_train)
-print(x_train.shape, y_train.shape)
-print(x_flip.shape, y_flip.shape)
 x_train = np.concatenate((x_train, x_flip), axis=0)
 y_train = np.concatenate((y_train, y_flip), axis=0)
 
 # Rotation
 x_rot, y_rot = augment_rotate_full(x_train, y_train)
-x_aug, y_aug = augment_rotate_zoom(x_train, y_train, trials=3)
-print(x_train.shape, y_train.shape)
-print(x_rot.shape, y_rot.shape)
-print(x_aug.shape, y_aug.shape)
+x_aug, y_aug = augment_rotate_zoom(x_train, y_train, trials=1)
 
 x_train = np.concatenate((x_train, x_rot, x_aug), axis=0)
 y_train = np.concatenate((y_train, y_rot, y_aug), axis=0)
@@ -318,38 +322,60 @@ model.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
 # model.summary()
 
 # Set callbacks
-file_checkpoint = "baseline_cnn_check.h5"
+file_checkpoint = path_out + 'baseline.h5'
 checkpoint = ModelCheckpoint(file_checkpoint, monitor='val_acc', verbose=1, save_best_only=True, mode='max')
 early = EarlyStopping(monitor="val_acc", mode="max", patience=args.early_patience, verbose=1)
 redonplat = ReduceLROnPlateau(monitor="val_acc", mode="max", patience=15, verbose=2)
-callbacks_list = [checkpoint, early]
+callbacks_list = [checkpoint]
+if args.valid_split > 0:
+	callbacks_list.append(early)
 if verbose:
 	print('Compiled the model...')
 
 # Train the model
-model.fit(x_train, y_train,
-          batch_size=args.batch_size,
-          epochs=args.epochs,
-          validation_data=(x_valid, y_valid),
-          callbacks=callbacks_list,
-          verbose=2,
-          shuffle=True)
+if args.valid_split > 0:
+	history = model.fit(x_train, y_train,
+	          batch_size=args.batch_size,
+	          epochs=args.epochs,
+	          validation_data=(x_valid, y_valid),
+	          callbacks=callbacks_list,
+	          verbose=2,
+	          shuffle=True)
+else:
+	model.fit(x_train, y_train,
+	          batch_size=args.batch_size,
+	          epochs=args.epochs,
+	          callbacks=callbacks_list,
+	          verbose=2,
+	          shuffle=True)
 if verbose:
 	print('Finished training...')
 
+# Save the history file
+if args.valid_split > 0:
+	np.savez(path_out + 'history.npz',
+		acc=history.history['acc'],
+		val_acc=history.history['val_acc'],
+		loss=history.history['loss'],
+		val_loss=history.history['val_loss'])
+
 # Load the checkpoint model
-model.load_weights(file_checkpoint)
+if args.valid_split > 0:
+	model.load_weights(file_checkpoint)
 
 # Predict on test data
-test_pred = pred_overlap(model, x_test, dim_train, dim_test)
-# test_pred = pred_resize(model, x_test, dim_train, dim_test)
-np.save('test_pred_holdout_aug.npy', test_pred)
+test_pred_overlap = pred_overlap(model, x_test, dim_train, dim_test)
+np.save(path_out + 'test_pred_overlap.npy', test_pred_overlap)
+test_pred_resize = pred_resize(model, x_test, dim_train, dim_test)
+np.save(path_out + 'test_pred_resize.npy', test_pred_resize)
 
 # Create submission
-sub_fname = 'submission_holdout_aug.csv'
-create_submission(test_pred, sub_fname=sub_fname)
+sub_fname = path_out + 'submission_overlap.csv'
+create_submission(test_pred_overlap, sub_fname=sub_fname)
+sub_fname = path_out + 'submission_resize.csv'
+create_submission(test_pred_resize, sub_fname=sub_fname)
 if verbose:
 	print('Created the submission file...')
+
 # Send submission file
 # submit_solution(fname=submission_filename, message='test')
-
