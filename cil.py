@@ -22,21 +22,23 @@ FNULL = open(os.devnull, 'w')
 
 argparser = argparse.ArgumentParser()
 argparser.add_argument('--verbose', action='store', dest='verbose', help='verbosity of the script', default=True, type=bool)
-argparser.add_argument('--batch-size', action='store', dest='batch_size', help='batch size for processing the samples', default=16, type=int)
+argparser.add_argument('--batch-size', action='store', dest='batch_size', help='batch size for processing the samples', default=32, type=int)
 argparser.add_argument('--early-patience', action='store', dest='early_patience', help='patience for early stopping', default=25, type=int)
-argparser.add_argument('--epochs', action='store', dest='epochs', help='number of epochs', default=45, type=int)
-argparser.add_argument('--valid-split', action='store', dest='valid_split', help='percentage of validation examples', default=0.0, type=float)
+argparser.add_argument('--epochs', action='store', dest='epochs', help='number of epochs', default=200, type=int)
+argparser.add_argument('--valid-split', action='store', dest='valid_split', help='percentage of validation examples', default=0.1, type=float)
 args = argparser.parse_args()
 verbose = args.verbose
 
-def download_data(verbose=False):
+def download_data(verbosity=True):
 	'''
 	Downloads data from kaggle if not exists, then unpacks and deletes archives.
 	'''
 	if os.path.isdir(path_train) and os.path.isdir(path_test):
 		return
-	stdout = None if verbose else FNULL
-	stderr = None if verbose else subprocess.STDOUT
+	if verbose:
+		print('Downloading data...')
+	stdout = None if verbosity else FNULL
+	stderr = None if verbosity else subprocess.STDOUT
 	subprocess.call('kaggle competitions download -c cil-road-segmentation-2019'.split(' '), stdout=stdout, stderr=stderr)
 	subprocess.call('unzip training.zip'.split(' '), stdout=stdout, stderr=stderr)
 	subprocess.call('unzip sample_submission.csv.zip'.split(' '), stdout=stdout, stderr=stderr)
@@ -244,8 +246,15 @@ def build_model():
 	Constructs a baseline model.
 	'''
 	model = Sequential()
-	model.add(Conv2D(128, (3, 3), padding='same',
+	model.add(Conv2D(256, (3, 3), padding='same',
 	                 input_shape=x_train.shape[1:]))
+	model.add(Activation('relu'))
+	model.add(Conv2D(256, (3, 3)))
+	model.add(Activation('relu'))
+	model.add(MaxPooling2D(pool_size=(2, 2)))
+	model.add(Dropout(0.2))
+
+	model.add(Conv2D(128, (3, 3), padding='same'))
 	model.add(Activation('relu'))
 	model.add(Conv2D(128, (3, 3)))
 	model.add(Activation('relu'))
@@ -254,19 +263,12 @@ def build_model():
 
 	model.add(Conv2D(64, (3, 3), padding='same'))
 	model.add(Activation('relu'))
-	model.add(Conv2D(64, (3, 3)))
+	model.add(Conv2DTranspose(64, (3,3), strides=(2,2)))
 	model.add(Activation('relu'))
-	model.add(MaxPooling2D(pool_size=(2, 2)))
+	model.add(Conv2DTranspose(32, (3,3), strides=(1,1)))
 	model.add(Dropout(0.2))
 
-	model.add(Conv2D(32, (3, 3), padding='same'))
-	model.add(Activation('relu'))
-	model.add(Conv2DTranspose(32, (3,3), strides=(2,2)))
-	model.add(Activation('relu'))
-	model.add(Conv2DTranspose(16, (3,3), strides=(1,1)))
-	model.add(Dropout(0.2))
-
-	model.add(Conv2D(8, (3, 3), padding='same'))
+	model.add(Conv2D(16, (3, 3), padding='same'))
 	model.add(Activation('relu'))
 	model.add(Conv2DTranspose(4, (3,3), strides=(2,2), padding='same'))
 	model.add(Activation('relu'))
@@ -281,14 +283,13 @@ path_train = './training/'
 path_test = './test_images/'
 path_pred = './pred_ims/'
 path_out = './outdir/'
-paths = [path_train, path_test, path_pred, path_out]
 
-for directory in paths:
+download_data()
+for directory in [path_pred, path_out]:
 	if not os.path.exists(directory):
 		print(directory, ' not exists')
 		os.makedirs(directory)
 
-download_data()
 x_train, y_train, x_test = load_data()
 dim_test = x_test.shape[1]
 dim_train = x_train.shape[1]
@@ -300,35 +301,47 @@ if args.valid_split > 0:
 	x_train, y_train, x_valid, y_valid = hold_out_validation(x_train, y_train, valid_split=0.1)
 
 # Augment the data
+if verbose:
+	print(x_train.shape[0], 'original training examples')
 
 # Symmetry
 x_flip, y_flip = augment_flip(x_train, y_train)
 x_train = np.concatenate((x_train, x_flip), axis=0)
 y_train = np.concatenate((y_train, y_flip), axis=0)
+if verbose:
+	print(x_flip.shape[0], 'flipped training examples')
 
 # Rotation
 x_rot, y_rot = augment_rotate_full(x_train, y_train)
 x_aug, y_aug = augment_rotate_zoom(x_train, y_train, trials=1)
+if verbose:
+	print(x_rot.shape[0], 'rotated training examples')
+	print(x_aug.shape[0], 'rotated and zoomed training examples')
 
 x_train = np.concatenate((x_train, x_rot, x_aug), axis=0)
 y_train = np.concatenate((y_train, y_rot, y_aug), axis=0)
 if verbose:
+	print(x_train.shape[0], 'training examples in total')
 	print('Augmented the training data...')
 
 # Build and compile the model
 model = build_model()
 opt = keras.optimizers.Adam(0.001)
 model.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
-# model.summary()
+model.summary()
 
 # Set callbacks
-file_checkpoint = path_out + 'baseline.h5'
-checkpoint = ModelCheckpoint(file_checkpoint, monitor='val_acc', verbose=1, save_best_only=True, mode='max')
+file_bestval_checkpoint = path_out + 'baseline_bestval.h5'
+file_periodic_checkpoint = path_out + 'baseline_periodic-{epoch:02d}.h5'
+bestval_checkpoint = ModelCheckpoint(file_bestval_checkpoint, monitor='val_acc', verbose=1, save_best_only=True, mode='max')
+periodic_checkpoint = ModelCheckpoint(file_periodic_checkpoint, monitor='val_loss', verbose=1, save_best_only=False, save_weights_only=False, mode='auto', period=5)
 early = EarlyStopping(monitor="val_acc", mode="max", patience=args.early_patience, verbose=1)
 redonplat = ReduceLROnPlateau(monitor="val_acc", mode="max", patience=15, verbose=2)
-callbacks_list = [checkpoint]
+callbacks_list = [periodic_checkpoint]
 if args.valid_split > 0:
 	callbacks_list.append(early)
+	callbacks_list.append(bestval_checkpoint)
+	callbacks_list.append(redonplat)
 if verbose:
 	print('Compiled the model...')
 
@@ -361,7 +374,7 @@ if args.valid_split > 0:
 
 # Load the checkpoint model
 if args.valid_split > 0:
-	model.load_weights(file_checkpoint)
+	model.load_weights(file_bestval_checkpoint)
 
 # Predict on test data
 test_pred_overlap = pred_overlap(model, x_test, dim_train, dim_test)
