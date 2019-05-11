@@ -1,25 +1,24 @@
 #!/usr/bin/python
 import os
 import sys
-import Image
+import PIL
+from PIL import Image
 import math
 import matplotlib.image as mpimg
 import numpy as np
-
-label_file = 'dummy_submission.csv'
-
-h = 16
-w = h
-imgwidth = int(math.ceil((600.0/w))*w)
-imgheight = int(math.ceil((600.0/h))*h)
-nc = 3
 
 # Convert an array of binary labels to a uint8
 def binary_to_uint8(img):
     rimg = (img * 255).round().astype(np.uint8)
     return rimg
 
-def reconstruct_from_labels(image_id):
+def reconstruct_from_labels(label_file, image_id):
+    h = 16
+    w = h
+    imgwidth = int(math.ceil((600.0/w))*w)
+    imgheight = int(math.ceil((600.0/h))*h)
+    nc = 3
+
     im = np.zeros((imgwidth, imgheight), dtype=np.uint8)
     f = open(label_file)
     lines = f.readlines()
@@ -45,11 +44,6 @@ def reconstruct_from_labels(image_id):
 
         im[j:je, i:ie] = binary_to_uint8(adata)
 
-    Image.fromarray(im).save('prediction_' + '%.3d' % image_id + '.png')
+    # Image.fromarray(im).save('prediction_' + '%.3d' % image_id + '.png')
 
     return im
-
-for i in range(1, 5):
-    reconstruct_from_labels(i)
-   
-

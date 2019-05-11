@@ -4,3 +4,4 @@ training
 test_images
 __pycache__
 sample_submission.csv
+ex-outdir
