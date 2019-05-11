@@ -15,11 +15,11 @@ FNULL = open(os.devnull, 'w')
 
 argparser = argparse.ArgumentParser()
 argparser.add_argument('--verbose', action='store', dest='verbose', help='verbosity of the script', default=True, type=bool)
-argparser.add_argument('--augment', action='store', dest='augment', help='augment the training data', default=False, type=bool)
+argparser.add_argument('--augment', action='store', dest='augment', help='augment the training data', default=True, type=bool)
 argparser.add_argument('--batch-size', action='store', dest='batch_size', help='batch size for processing the samples', default=4, type=int)
 argparser.add_argument('--early-patience', action='store', dest='early_patience', help='patience for early stopping', default=25, type=int)
-argparser.add_argument('--epochs', action='store', dest='epochs', help='number of epochs', default=0, type=int)
-argparser.add_argument('--valid-split', action='store', dest='valid_split', help='percentage of validation examples', default=0.0, type=float)
+argparser.add_argument('--epochs', action='store', dest='epochs', help='number of epochs', default=100, type=int)
+argparser.add_argument('--valid-split', action='store', dest='valid_split', help='percentage of validation examples', default=0.1, type=float)
 args = argparser.parse_args()
 verbose = args.verbose
 
@@ -163,24 +163,21 @@ if args.epochs > 0:
 			val_loss=history.history['val_loss'])
 
 # Load the checkpoint model
-model.load_weights('./temp-outdir/baseline_periodic-60.h5')
-
 if args.valid_split > 0:
 	model.load_weights(file_bestval_cp)
 
 # Predict on test data
-# test_pred_overlap = pred_overlap(model, x_test, dim_train, dim_test, args.batch_size)
-# np.save(path_out + 'test_pred_overlap.npy', test_pred_overlap)
 test_pred_resize = pred_resize(model, x_test, dim_train, dim_test, args.batch_size)
 np.save(path_out + 'test_pred_resize.npy', test_pred_resize)
 
 # Create submission
-# sub_fname = path_out + 'submission_overlap.csv'
-# create_submission(test_pred_overlap, path_test, path_pred, sub_fname=sub_fname)
 sub_fname = path_out + 'submission_resize.csv'
 create_submission(test_pred_resize, path_test, path_pred, sub_fname=sub_fname)
 if verbose:
 	print('Created the submission file...')
 
-# Send submission file
-# submit_solution(fname=submission_filename, message='test')
+# Currently not used:
+# test_pred_overlap = pred_overlap(model, x_test, dim_train, dim_test, args.batch_size)
+# np.save(path_out + 'test_pred_overlap.npy', test_pred_overlap)
+# sub_fname = path_out + 'submission_overlap.csv'
+# create_submission(test_pred_overlap, path_test, path_pred, sub_fname=sub_fname)
