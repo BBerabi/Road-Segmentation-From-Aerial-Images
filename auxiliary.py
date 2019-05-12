@@ -97,6 +97,46 @@ def pred_overlap(model, x_test, dim_train, dim_test, batch_size):
 	test_pred = np.divide(test_pred, pred_weights)
 	return test_pred
 
+def pred_maximum_overlap(model, x_test, dim_train, dim_test, batch_size):
+	'''
+	Make predictions by taking the maximum over predictions of smaller overlapping segments.
+	'''
+	n_test = x_test.shape[0]
+	tl = x_test[:,:dim_train,:dim_train,:]
+	tr = x_test[:,:dim_train,-dim_train:,:]
+	bl = x_test[:,-dim_train:,:dim_train,:]
+	br = x_test[:,-dim_train:,-dim_train:,:]
+	tl_pred = model.predict(tl, batch_size)
+	tr_pred = model.predict(tr, batch_size)
+	bl_pred = model.predict(bl, batch_size)
+	br_pred = model.predict(br, batch_size)
+	test_pred = np.zeros((n_test, dim_test, dim_test, 1))
+	test_pred[:,:dim_train,:dim_train,:] = np.maximum(tl_pred, test_pred[:,:dim_train,:dim_train,:])
+	test_pred[:,:dim_train,-dim_train:,:] = np.maximum(tr_pred, test_pred[:,:dim_train,-dim_train:,:])
+	test_pred[:,-dim_train:,:dim_train,:] = np.maximum(bl_pred, test_pred[:,-dim_train:,:dim_train,:])
+	test_pred[:,-dim_train:,-dim_train:,:] = np.maximum(br_pred, test_pred[:,-dim_train:,-dim_train:,:])
+	return test_pred
+
+def pred_minimum_overlap(model, x_test, dim_train, dim_test, batch_size):
+	'''
+	Make predictions by taking the minimum over predictions of smaller overlapping segments.
+	'''
+	n_test = x_test.shape[0]
+	tl = x_test[:,:dim_train,:dim_train,:]
+	tr = x_test[:,:dim_train,-dim_train:,:]
+	bl = x_test[:,-dim_train:,:dim_train,:]
+	br = x_test[:,-dim_train:,-dim_train:,:]
+	tl_pred = model.predict(tl, batch_size)
+	tr_pred = model.predict(tr, batch_size)
+	bl_pred = model.predict(bl, batch_size)
+	br_pred = model.predict(br, batch_size)
+	test_pred = np.zeros((n_test, dim_test, dim_test, 1))
+	test_pred[:,:dim_train,:dim_train,:] = np.minimum(tl_pred, test_pred[:,:dim_train,:dim_train,:])
+	test_pred[:,:dim_train,-dim_train:,:] = np.minimum(tr_pred, test_pred[:,:dim_train,-dim_train:,:])
+	test_pred[:,-dim_train:,:dim_train,:] = np.minimum(bl_pred, test_pred[:,-dim_train:,:dim_train,:])
+	test_pred[:,-dim_train:,-dim_train:,:] = np.minimum(br_pred, test_pred[:,-dim_train:,-dim_train:,:])
+	return test_pred
+
 def pred_resize(model, x_test, dim_train, dim_test, batch_size):
 	'''
 	Downscales the images and upscales the predictions.
@@ -212,6 +252,14 @@ def aug_rot_full(x_train, y_train):
 	x_aug = np.array(x_aug)
 	y_aug = np.array(y_aug)
 	return x_aug, y_aug
+
+def save_maps(test_pred, path_test, path_out):
+	# Get file names
+	imgnames = [path_out + fname for fname in sorted(os.listdir(path_test), key=lambda x: int( x[x.find('_')+1:x.find('.')] ))]
+	# Save prediction images
+	for i in range(len(imgnames)):
+		imarr = test_pred[i,:,:,0]
+		plt.imsave(imgnames[i], imarr, cmap=cm.gray)
 
 # Currently not working
 
