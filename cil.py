@@ -6,8 +6,8 @@ from auxiliary import load_data, download_data, create_submission
 from auxiliary import pred_overlap, pred_resize, hold_out_validation
 from auxiliary import aug_flip, aug_rot_zoom, aug_crop_zoom, aug_rot_full
 from keras.models import Sequential, Model
-from keras.layers import Activation, Dropout, Conv2D, MaxPooling2D, Conv2DTranspose, Input
-from keras.callbacks import ModelCheckpoint, EarlyStopping, LearningRateScheduler, ReduceLROnPlateau
+from keras.layers import Activation, Dropout, Conv2D, MaxPooling2D, Conv2DTranspose, Input, Add
+from keras.callbacks import ModelCheckpoint, EarlyStopping, LearningRateScheduler, ReduceLROnPlateau, TensorBoard
 
 os.environ['KAGGLE_USERNAME'] = ""
 os.environ['KAGGLE_KEY'] = ""
@@ -88,6 +88,113 @@ def baseline_model():
 
 	return model
 
+def fcn_model():
+	'''
+	Constructs a model based on Hofmann's paper
+	'''
+
+	#Output: (3,400,400)
+	inputs = Input(shape=x_train.shape[1:])
+
+	#Output: (64,400,400) for this block
+	x = Conv2D(64, (5, 5), padding='same')(inputs)
+	x = Activation('relu')(x)
+	x = Conv2D(64, (5, 5), padding='same')(x)
+	x = Activation('relu')(x)
+
+	#Output: (64,200,200)
+	x = MaxPooling2D(pool_size=(2, 2))(x)
+
+	#INTERMEDIARY OUTPUT TO BE FUSED with size (3,200,200)
+	out_pool1 = Conv2D(3, (3,3), padding='same')(x)		
+
+	#Output: (128,200,200) for this block
+	x = Conv2D(128, (3, 3), padding='same')(x)
+	x = Activation('relu')(x)
+	x = Conv2D(128, (3, 3), padding='same')(x)
+	x = Activation('relu')(x)
+
+	#Output: (128,100,100)
+	x = MaxPooling2D(pool_size=(2,2))(x)
+
+	#INTERMEDIARY OUTPUT TO BE FUSED with size (3,100,100)
+	out_pool2 = Conv2D(3, (3,3), padding='same')(x)		
+
+	#Output: (256,100,100) for this block
+	x = Conv2D(256, (3, 3), padding='same')(x)
+	x = Activation('relu')(x)
+	x = Conv2D(256, (3, 3), padding='same')(x)
+	x = Activation('relu')(x)
+	x = Conv2D(256, (3, 3), padding='same')(x)
+	x = Activation('relu')(x)
+
+	#Output: (256,50,50)
+	x = MaxPooling2D(pool_size=(2,2))(x)
+
+	#INTERMEDIARY OUTPUT TO BE FUSED with size (3,50,50)
+	out_pool3 = Conv2D(3, (3,3), padding='same')(x)		
+
+	#Output: (512,50,50) for this block
+	x = Conv2D(512, (3, 3), padding='same')(x)
+	x = Activation('relu')(x)
+	x = Conv2D(512, (3, 3), padding='same')(x)
+	x = Activation('relu')(x)
+	x = Conv2D(512, (3, 3), padding='same')(x)
+	x = Activation('relu')(x)
+
+	#Output: (512,25,25)
+	x = MaxPooling2D(pool_size=(2,2))(x)
+
+	#INTERMEDIARY OUTPUT TO BE FUSED with size (3,25,25)
+	out_pool4 = Conv2D(3, (3,3), padding='same')(x)
+
+	#Output: (512,25,25) for this block
+	x = Conv2D(512, (3, 3), padding='same')(x)
+	x = Activation('relu')(x)
+	x = Conv2D(512, (3, 3), padding='same')(x)
+	x = Activation('relu')(x)
+	x = Conv2D(512, (3, 3), padding='same')(x)
+	x = Activation('relu')(x)
+
+	#Output: (512,12,12)
+	x = MaxPooling2D(pool_size=(2,2))(x)
+
+	#Output: (4096,10,10) for this block
+	x = Conv2D(4096, (3, 3), padding='valid')(x)
+	x = Activation('relu')(x)
+	x = Dropout(0.5)(x)
+	x = Conv2D(4096, (3, 3), padding='same')(x)
+	x = Activation('relu')(x)
+	x = Dropout(0.5)(x)
+
+	#Output: (3,10,10)
+	x = Conv2D(3, (3, 3), padding='same')(x)
+
+	#Output: (3,12,12) ? 
+	x = Conv2DTranspose(3, (3,3), strides=(1,1))(x)
+	#Output: (3,25,25) ? 
+	x = Conv2DTranspose(3, (3,3), strides=(2,2))(x)
+	x = Add()([out_pool4, x])
+	x = Conv2D(3, (1,1), padding='same')(x)
+	#Output (3,50,50) ? 
+	x = Conv2DTranspose(3, (3,3), strides=(2,2), padding='same')(x)
+	x = Add()([out_pool3, x])
+	x = Conv2D(3, (1,1), padding='same')(x)
+	#Output (3,100,100) ? 
+	x = Conv2DTranspose(3, (3,3), strides=(2,2), padding='same')(x)
+	x = Add()([out_pool2, x])
+	x = Conv2D(3, (1,1), padding='same')(x)
+	#Output (1,400,400) ? 
+	x = Conv2DTranspose(1, (1,1), strides=(4,4), padding='same')(x)
+
+	#For Now
+	predictions = Activation('sigmoid')(x)
+
+	model = Model(inputs=inputs, outputs=predictions)
+
+	return model
+
+
 path_train = './training/'
 path_test = './test_images/'
 path_pred = './pred_ims/'
@@ -114,10 +221,11 @@ if args.augment:
 	x_train, y_train = augment_train(x_train, y_train)
 
 # Build and compile the model
-model = baseline_model()
+model = fcn_model()
 opt = keras.optimizers.Adam(0.001)
 model.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
 model.summary()
+
 
 # Set callbacks
 file_bestval_cp = path_out + 'baseline_bestval.h5'
@@ -126,11 +234,13 @@ bestval_cp = ModelCheckpoint(file_bestval_cp, monitor='val_acc', verbose=1, save
 periodic_cp = ModelCheckpoint(file_periodic_cp, monitor='val_loss', verbose=1, save_best_only=False, mode='auto', period=5)
 early = EarlyStopping(monitor="val_acc", mode="max", patience=args.early_patience, verbose=1)
 redonplat = ReduceLROnPlateau(monitor="val_acc", mode="max", patience=15, verbose=2)
+tensorboard = TensorBoard(log_dir='./logs', histogram_freq=1, batch_size=args.batch_size, write_graph=True, write_grads=True)
 callbacks_list = [periodic_cp]
 if args.valid_split > 0:
 	callbacks_list.append(early)
 	callbacks_list.append(bestval_cp)
 	callbacks_list.append(redonplat)
+	callbacks_list.append(tensorboard)
 if verbose:
 	print('Compiled the model...')
 
