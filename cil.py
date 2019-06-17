@@ -222,7 +222,8 @@ if args.augment:
 
 # Build and compile the model
 model = fcn_model()
-opt = keras.optimizers.Adam(0.001)
+#opt = keras.optimizers.Adam(0.001)
+opt = keras.optimizers.SGD(lr=1e-3, momentum=0.9, decay=0.06)
 model.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
 model.summary()
 
