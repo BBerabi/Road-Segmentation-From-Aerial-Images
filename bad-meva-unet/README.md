@@ -3,7 +3,7 @@
 this folder should have following subfolders and files:
 
 --data: put the downloaded data under this folder after unzipping training
-in the subfolders called "training" and "test_set_images"
+in the subfolders called "training" and "test_images"
 after augmentations, one can choose to save the augmented files as well (obviously under training)
 valdiation data created in train.py
 
