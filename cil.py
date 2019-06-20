@@ -16,10 +16,14 @@ FNULL = open(os.devnull, 'w')
 argparser = argparse.ArgumentParser()
 argparser.add_argument('--verbose', action='store', dest='verbose', help='verbosity of the script', default=True, type=bool)
 argparser.add_argument('--augment', action='store', dest='augment', help='augment the training data', default=True, type=bool)
-argparser.add_argument('--batch-size', action='store', dest='batch_size', help='batch size for processing the samples', default=4, type=int)
+argparser.add_argument('--batch-size', action='store', dest='batch_size', help='batch size for processing the samples', default=16, type=int)
 argparser.add_argument('--early-patience', action='store', dest='early_patience', help='patience for early stopping', default=25, type=int)
 argparser.add_argument('--epochs', action='store', dest='epochs', help='number of epochs', default=100, type=int)
 argparser.add_argument('--valid-split', action='store', dest='valid_split', help='percentage of validation examples', default=0.1, type=float)
+#argparser.add_argument('--tensor-log', action='store', dest='tensor_log', help='directory for tensorboard log', default='logfiles')
+argparser.add_argument('--lr', action='store', dest='lr', help='learning rate of optimizer', default=-4, type=int)
+
+
 args = argparser.parse_args()
 verbose = args.verbose
 
@@ -97,49 +101,52 @@ def fcn_model():
 	inputs = Input(shape=x_train.shape[1:])
 
 	#Output: (64,400,400) for this block
-	x = Conv2D(64, (5, 5), padding='same')(inputs)
+	x = Conv2D(64, (15, 15), padding='same')(inputs)
 	x = Activation('relu')(x)
-	x = Conv2D(64, (5, 5), padding='same')(x)
+	x = Conv2D(64, (15, 15), padding='same')(x)
 	x = Activation('relu')(x)
+
+	#Output from first 2 convolutions (will be used at the end)
+	#out_first = Conv2D(3, (3, 3), padding='same')(x)
 
 	#Output: (64,200,200)
 	x = MaxPooling2D(pool_size=(2, 2))(x)
 
 	#INTERMEDIARY OUTPUT TO BE FUSED with size (3,200,200)
-	out_pool1 = Conv2D(3, (3,3), padding='same')(x)		
+	out_pool1 = Conv2D(3, (11, 11), padding='same')(x)
 
 	#Output: (128,200,200) for this block
-	x = Conv2D(128, (3, 3), padding='same')(x)
+	x = Conv2D(128, (11, 11), padding='same')(x)
 	x = Activation('relu')(x)
-	x = Conv2D(128, (3, 3), padding='same')(x)
+	x = Conv2D(128, (11, 11), padding='same')(x)
 	x = Activation('relu')(x)
 
 	#Output: (128,100,100)
 	x = MaxPooling2D(pool_size=(2,2))(x)
 
 	#INTERMEDIARY OUTPUT TO BE FUSED with size (3,100,100)
-	out_pool2 = Conv2D(3, (3,3), padding='same')(x)		
+	out_pool2 = Conv2D(3, (7,7), padding='same')(x)		
 
 	#Output: (256,100,100) for this block
-	x = Conv2D(256, (3, 3), padding='same')(x)
+	x = Conv2D(256, (7, 7), padding='same')(x)
 	x = Activation('relu')(x)
-	x = Conv2D(256, (3, 3), padding='same')(x)
+	x = Conv2D(256, (7, 7), padding='same')(x)
 	x = Activation('relu')(x)
-	x = Conv2D(256, (3, 3), padding='same')(x)
+	x = Conv2D(256, (7, 7), padding='same')(x)
 	x = Activation('relu')(x)
 
 	#Output: (256,50,50)
 	x = MaxPooling2D(pool_size=(2,2))(x)
 
 	#INTERMEDIARY OUTPUT TO BE FUSED with size (3,50,50)
-	out_pool3 = Conv2D(3, (3,3), padding='same')(x)		
+	out_pool3 = Conv2D(3, (5, 5), padding='same')(x)		
 
 	#Output: (512,50,50) for this block
-	x = Conv2D(512, (3, 3), padding='same')(x)
+	x = Conv2D(512, (5, 5), padding='same')(x)
 	x = Activation('relu')(x)
-	x = Conv2D(512, (3, 3), padding='same')(x)
+	x = Conv2D(512, (5, 5), padding='same')(x)
 	x = Activation('relu')(x)
-	x = Conv2D(512, (3, 3), padding='same')(x)
+	x = Conv2D(512, (5, 5), padding='same')(x)
 	x = Activation('relu')(x)
 
 	#Output: (512,25,25)
@@ -169,23 +176,59 @@ def fcn_model():
 
 	#Output: (3,10,10)
 	x = Conv2D(3, (3, 3), padding='same')(x)
+	x = Activation('relu')(x)
 
 	#Output: (3,12,12) ? 
 	x = Conv2DTranspose(3, (3,3), strides=(1,1))(x)
+	x = Activation('relu')(x)
+
 	#Output: (3,25,25) ? 
 	x = Conv2DTranspose(3, (3,3), strides=(2,2))(x)
 	x = Add()([out_pool4, x])
-	x = Conv2D(3, (1,1), padding='same')(x)
+	x = Activation('relu')(x)
+	#x = Conv2D(3, (1,1), padding='same')(x)
+	x = Conv2D(3, (3,3), padding='same')(x)
+	x = Activation('relu')(x)
+
 	#Output (3,50,50) ? 
 	x = Conv2DTranspose(3, (3,3), strides=(2,2), padding='same')(x)
 	x = Add()([out_pool3, x])
-	x = Conv2D(3, (1,1), padding='same')(x)
+	x = Activation('relu')(x)
+	#x = Conv2D(3, (1,1), padding='same')(x)
+	x = Conv2D(3, (3,3), padding='same')(x)
+	x = Activation('relu')(x)
+
 	#Output (3,100,100) ? 
 	x = Conv2DTranspose(3, (3,3), strides=(2,2), padding='same')(x)
 	x = Add()([out_pool2, x])
-	x = Conv2D(3, (1,1), padding='same')(x)
+	x = Activation('relu')(x)
+	#x = Conv2D(3, (1,1), padding='same')(x)
+	x = Conv2D(3, (3,3), padding='same')(x)
+	x = Activation('relu')(x)
+
+	"""
+	#First trial
 	#Output (1,400,400) ? 
 	x = Conv2DTranspose(1, (1,1), strides=(4,4), padding='same')(x)
+
+	"""
+
+	#Second trial
+	#Output (3,200,200) ? 
+	x = Conv2DTranspose(3, (3,3), strides=(2,2), padding='same')(x)
+	x = Add()([out_pool1, x])
+	x = Activation('relu')(x)
+	#x = Conv2D(3, (1,1), padding='same')(x)
+	x = Conv2D(3, (3,3), padding='same')(x)
+	x = Activation('relu')(x)
+
+	x = Conv2DTranspose(3, (3,3), strides=(2,2), padding='same')(x)
+	#x = Add()([out_first,x])
+	#x = Activation('relu')(x)
+	#x = Conv2D(3, (3,3), padding='same')(x)
+	#x = Activation('relu')(x)
+	x = Conv2D(1, (3,3), padding='same')(x)
+
 
 	#For Now
 	predictions = Activation('sigmoid')(x)
@@ -197,8 +240,8 @@ def fcn_model():
 
 path_train = './training/'
 path_test = './test_images/'
-path_pred = './pred_ims/'
-path_out = './outdir/'
+path_pred = './pred_ims/batch'+str(args.batch_size)+'_lr'+str(args.lr)+'_conv15_full-1_gpuT'
+path_out = './outdir/batch'+str(args.batch_size)+'_lr'+str(args.lr)+'_conv15_full-1_gpuT'
 download_data(path_train, path_test)
 for directory in [path_pred, path_out]:
 	if not os.path.exists(directory):
@@ -223,19 +266,21 @@ if args.augment:
 # Build and compile the model
 model = fcn_model()
 #opt = keras.optimizers.Adam(0.001)
-opt = keras.optimizers.SGD(lr=1e-3, momentum=0.9, decay=0.06)
+opt = keras.optimizers.SGD(lr=10**args.lr, momentum=0.9, decay=0.06)
 model.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
 model.summary()
 
 
 # Set callbacks
-file_bestval_cp = path_out + 'baseline_bestval.h5'
-file_periodic_cp = path_out + 'baseline_periodic-{epoch:02d}.h5'
+file_bestval_cp = path_out + 'bestval.h5'
+file_periodic_cp = path_out + 'periodic-{epoch:02d}.h5'
 bestval_cp = ModelCheckpoint(file_bestval_cp, monitor='val_acc', verbose=1, save_best_only=True, mode='max')
 periodic_cp = ModelCheckpoint(file_periodic_cp, monitor='val_loss', verbose=1, save_best_only=False, mode='auto', period=5)
 early = EarlyStopping(monitor="val_acc", mode="max", patience=args.early_patience, verbose=1)
 redonplat = ReduceLROnPlateau(monitor="val_acc", mode="max", patience=15, verbose=2)
-tensorboard = TensorBoard(log_dir='./logs', histogram_freq=1, batch_size=args.batch_size, write_graph=True, write_grads=True)
+
+tensor_logdir = 'logfiles/batch'+str(args.batch_size)+'_lr'+str(args.lr)+'_conv15_full-1_gpuT'
+tensorboard = TensorBoard(log_dir=tensor_logdir, histogram_freq=1, batch_size=args.batch_size, write_graph=True, write_grads=True)
 callbacks_list = [periodic_cp]
 if args.valid_split > 0:
 	callbacks_list.append(early)
