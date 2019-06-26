@@ -56,12 +56,20 @@ def create_data_dirs(train_path,val_ratio=0.2, seed=42, build_augs_folder=True):
 			io.imsave(os.path.join(aug_path, 'groundtruth', 'satImage_%.3d.png'%i), np.array(label))
 
 			#create horizontally flipped images
-			im_flip = image.transpose(Image.FLIP_LEFT_RIGHT)
-			io.imsave(os.path.join(aug_path, 'images', 'satImage_%.3d_f.png'%i), np.array(im_flip))
+			im_flip_lr = image.transpose(Image.FLIP_LEFT_RIGHT)
+			io.imsave(os.path.join(aug_path, 'images', 'satImage_%.3d_flr.png'%i), np.array(im_flip_lr))
 
-			label_flip = label.transpose(Image.FLIP_LEFT_RIGHT)
-			io.imsave(os.path.join(aug_path, 'groundtruth', 'satImage_%.3d_f.png'%i), np.array(label_flip))
+			label_flip_lr = label.transpose(Image.FLIP_LEFT_RIGHT)
+			io.imsave(os.path.join(aug_path, 'groundtruth', 'satImage_%.3d_flr.png'%i), np.array(label_flip_lr))
+
+			#create vertically flipped images
+			im_flip_tb = image.transpose(Image.FLIP_TOP_BOTTOM)
+			io.imsave(os.path.join(aug_path, 'images', 'satImage_%.3d_ftb.png'%i), np.array(im_flip_tb))
+
+			label_flip_tb = label.transpose(Image.FLIP_TOP_BOTTOM)
+			io.imsave(os.path.join(aug_path, 'groundtruth', 'satImage_%.3d_ftb.png'%i), np.array(label_flip_tb))
 		
+			""" 90 rotations + 5 random rotation
 			#create rotated images, also rotated ones
 			for angle in [90, 180, 270]:
 				im_r = image.rotate(angle)
@@ -85,6 +93,22 @@ def create_data_dirs(train_path,val_ratio=0.2, seed=42, build_augs_folder=True):
 				image_rotated, label_rotated = aug_rot_zoom(np.array(image), np.array(label), angle)
 				io.imsave(os.path.join(aug_path, 'images', 'satImage_%.3d_%.3d.png'%(i, angle)), np.array(image_rotated))
 				io.imsave(os.path.join(aug_path, 'groundtruth', 'satImage_%.3d_%.3d.png'%(i, angle)), np.array(label_rotated))
+			"""
+
+			#Rotations of every 5 degrees
+			for angle in range(5,360,5):
+
+				image_rotated, label_rotated = aug_rot_zoom(np.array(image), np.array(label), angle)
+				io.imsave(os.path.join(aug_path, 'images', 'satImage_%.3d_%.3d.png'%(i, angle)), np.array(image_rotated))
+				io.imsave(os.path.join(aug_path, 'groundtruth', 'satImage_%.3d_%.3d.png'%(i, angle)), np.array(label_rotated))
+
+				image_rotated_flr, label_rotated_flr = aug_rot_zoom(np.array(im_flip_lr), np.array(label_flip_lr), angle)
+				io.imsave(os.path.join(aug_path, 'images', 'satImage_%.3d_flr_%.3d.png'%(i, angle)), np.array(image_rotated_flr))
+				io.imsave(os.path.join(aug_path, 'groundtruth', 'satImage_%.3d_flr_%.3d.png'%(i, angle)), np.array(label_rotated_flr))
+
+				image_rotated_ftb, label_rotated_ftb = aug_rot_zoom(np.array(im_flip_tb), np.array(label_flip_tb), angle)
+				io.imsave(os.path.join(aug_path, 'images', 'satImage_%.3d_ftb_%.3d.png'%(i, angle)), np.array(image_rotated_ftb))
+				io.imsave(os.path.join(aug_path, 'groundtruth', 'satImage_%.3d_ftb_%.3d.png'%(i, angle)), np.array(label_rotated_ftb))
 
 			for crop_len in [40, 60, 80, 100]:
 				x_alignment = random.randint(-crop_len+1,crop_len-1)
@@ -92,6 +116,7 @@ def create_data_dirs(train_path,val_ratio=0.2, seed=42, build_augs_folder=True):
 				image_zoomed, label_zoomed = aug_zoom(np.array(image), np.array(label), crop_len, x_alignment, y_alignment)
 				io.imsave(os.path.join(aug_path, 'images', 'satImage_%.3d_z%.3d.png'%(i, crop_len)), np.array(image_zoomed))
 				io.imsave(os.path.join(aug_path, 'groundtruth', 'satImage_%.3d_z%.3d.png'%(i, crop_len)), np.array(label_zoomed))
+			
 
 		train_images = os.listdir(os.path.join(aug_path, 'images'))
 		train_path= aug_path
