@@ -98,24 +98,30 @@ def create_data_dirs(train_path,val_ratio=0.2, seed=42, build_augs_folder=True):
 			#Rotations of every 5 degrees
 			for angle in range(5,360,5):
 
-				image_rotated, label_rotated = aug_rot_zoom(np.array(image), np.array(label), angle)
+				#image_rotated, label_rotated = aug_rot_zoom(np.array(image), np.array(label), angle)
+				image_rotated, label_rotated = aug_rot(np.array(image), np.array(label), angle)
 				io.imsave(os.path.join(aug_path, 'images', 'satImage_%.3d_%.3d.png'%(i, angle)), np.array(image_rotated))
 				io.imsave(os.path.join(aug_path, 'groundtruth', 'satImage_%.3d_%.3d.png'%(i, angle)), np.array(label_rotated))
 
-				image_rotated_flr, label_rotated_flr = aug_rot_zoom(np.array(im_flip_lr), np.array(label_flip_lr), angle)
+				#image_rotated_flr, label_rotated_flr = aug_rot_zoom(np.array(im_flip_lr), np.array(label_flip_lr), angle)
+				image_rotated_flr, label_rotated_flr = aug_rot(np.array(im_flip_lr), np.array(label_flip_lr), angle)
 				io.imsave(os.path.join(aug_path, 'images', 'satImage_%.3d_flr_%.3d.png'%(i, angle)), np.array(image_rotated_flr))
 				io.imsave(os.path.join(aug_path, 'groundtruth', 'satImage_%.3d_flr_%.3d.png'%(i, angle)), np.array(label_rotated_flr))
 
-				image_rotated_ftb, label_rotated_ftb = aug_rot_zoom(np.array(im_flip_tb), np.array(label_flip_tb), angle)
+				#image_rotated_ftb, label_rotated_ftb = aug_rot_zoom(np.array(im_flip_tb), np.array(label_flip_tb), angle)
+				image_rotated_ftb, label_rotated_ftb = aug_rot(np.array(im_flip_tb), np.array(label_flip_tb), angle)
 				io.imsave(os.path.join(aug_path, 'images', 'satImage_%.3d_ftb_%.3d.png'%(i, angle)), np.array(image_rotated_ftb))
 				io.imsave(os.path.join(aug_path, 'groundtruth', 'satImage_%.3d_ftb_%.3d.png'%(i, angle)), np.array(label_rotated_ftb))
 
+			#Zoom to random fields
+			'''
 			for crop_len in [40, 60, 80, 100]:
 				x_alignment = random.randint(-crop_len+1,crop_len-1)
 				y_alignment = random.randint(-crop_len+1,crop_len-1)
 				image_zoomed, label_zoomed = aug_zoom(np.array(image), np.array(label), crop_len, x_alignment, y_alignment)
 				io.imsave(os.path.join(aug_path, 'images', 'satImage_%.3d_z%.3d.png'%(i, crop_len)), np.array(image_zoomed))
 				io.imsave(os.path.join(aug_path, 'groundtruth', 'satImage_%.3d_z%.3d.png'%(i, crop_len)), np.array(label_zoomed))
+			'''
 			
 
 		train_images = os.listdir(os.path.join(aug_path, 'images'))
@@ -139,6 +145,15 @@ def aug_rot_zoom(x_train, y_train, degree):
 	y_rot = cv2.resize(cropped_img, dsize=(400, 400), interpolation=cv2.INTER_CUBIC)
 
 	return x_rot, y_rot
+
+def aug_rot(x_train, y_train, degree):
+	'''
+	Augments the training data by rotation: no zoom, black corners are filled with mode:mirror
+	'''
+	x_rot = ndimage.rotate(x_train, angle=degree, order=1, reshape=False, axes=(0,1), mode='mirror')
+	y_rot = ndimage.rotate(y_train, angle=degree, order=1, reshape=False, axes=(0,1), mode='mirror')
+	return x_rot, y_rot
+
 
 def aug_zoom(x_train, y_train, crop_len, x_alignment, y_alignment):
 	'''

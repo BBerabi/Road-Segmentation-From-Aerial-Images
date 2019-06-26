@@ -3,17 +3,17 @@ import numpy as np
 import os
 import tensorflow as tf
 from keras.callbacks import ReduceLROnPlateau, ModelCheckpoint, EarlyStopping, TensorBoard
-from preprocess import create_data_dirs, generate_train, generate_valid, generate_test
+from preprocess_yilmazcan import create_data_dirs, generate_train, generate_valid, generate_test
 from model import unet
 from mask_to_submission import make_submission
 from metrics import save_result, dice_loss, dice_coeff, bce_dice_loss
 np.random.seed(42)
 
-NUM_EPOCH = 5
-NUM_TRAINING_STEP = 1000
+NUM_EPOCH = 50
+NUM_TRAINING_STEP = 600
 NUM_VALIDATION_STEP = 80
 TEST_SIZE = 94
-BATCH_SIZE= 2
+BATCH_SIZE= 32
 train_path = os.path.join("data", "training")
 train_aug_path = os.path.join("data", "aug_train")
 val_path= os.path.join("data", "validation")
@@ -44,7 +44,7 @@ print("Build and train started.")
 model = unet(n_filter=32, activation='elu', dropout_rate=0.2, loss=dice_loss)
 callbacks = [
     EarlyStopping(monitor='val_loss', patience=9, verbose=1, min_delta=1e-4),
-    ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3, verbose=1, min_delta=1e-4),
+    ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3, verbose=1),
     ModelCheckpoint(os.path.join(weight_path, 'weights.{epoch:02d}-{val_loss:.2f}.hdf5'), monitor='val_loss', save_best_only=True, save_weights_only=False,verbose=1)
 ]
 #training
