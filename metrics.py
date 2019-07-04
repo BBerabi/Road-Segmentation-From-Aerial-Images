@@ -48,6 +48,8 @@ def save_result(save_path, npyfile):
     indices= np.load("test_indices.npy")
     if not os.path.exists(save_path):
         os.makedirs(save_path)
+    #Since results are saved as npyfile (collection of whole predicted images), 
+    #Now they are enumerated and saved as sepearate images
     for i, item in enumerate(npyfile):
         img = item[:,:,0]
         n= indices[i][:-4]
