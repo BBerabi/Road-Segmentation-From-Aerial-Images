@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # cil-project
 * To download the data and submit solutions, place the kaggle.json file in ~/.kaggle/
 * Data cannot be downloaded while the script is running on the gpu module.
@@ -9,7 +8,7 @@
 this folder should have following subfolders and files:
 
 --data: put the downloaded data under this folder after unzipping training
-in the subfolders called "training" and "test_set_images"
+in the subfolders called "training" and "test_images"
 after augmentations, one can choose to save the augmented files as well (obviously under training)
 valdiation data created in train.py
 
@@ -30,5 +29,3 @@ loss: 0.1135 - f1: 0.8865 - acc: 0.9562 - val_loss: 0.1408 - val_f1: 0.8592 - va
 --mask_to_submission.py: contains helpers for submission
 
 --metrics.py: contains f1 score calc
-
->>>>>>> 0e5193d663204637fa83bcedc0211c9d87372d2e
