@@ -32,8 +32,8 @@ loss: 0.1135 - f1: 0.8865 - acc: 0.9562 - val_loss: 0.1408 - val_f1: 0.8592 - va
 
 Note: If one wants to ensemble different methods (i.e. training on differently pre-processed data), the following steps can be taken:
  * For all different preprocess techniques:
-  * Update preprocess.py
-  * Run train.py
-  * Observe the saved weights for the best validation score
+&nbsp;&nbsp;  * Update preprocess.py
+&nbsp;&nbsp;  * Run train.py
+&nbsp;&nbsp;  * Observe the saved weights for the best validation score
  * Open pred_sub_only.py and put the names of the weights into the array called weights
  * Submission.csv will contain the predictions of ensembled methods.
